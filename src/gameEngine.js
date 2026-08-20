@@ -213,6 +213,20 @@ export function decideSeller(listing, offer, round = 0, random = Math.random) {
   return { type: 'reject', text: pick(['Нет, это слишком мало.', 'Спасибо, но за такую цену оставлю себе.', 'Не, столько точно не скину.', 'Уже есть предложение повыше.'], random) };
 }
 
+export const MAX_SAME_SELLER_OFFER_ATTEMPTS = 3;
+
+export function getSellerOfferAttempt(negotiation, amount) {
+  if (negotiation.lastRejectedOffer != null && amount < negotiation.lastRejectedOffer) {
+    return { allowed: false, reason: 'lower' };
+  }
+  const repeated = negotiation.lastSentOffer === amount;
+  const attempt = repeated ? (negotiation.sameOfferAttempts || 0) + 1 : 1;
+  if (attempt > MAX_SAME_SELLER_OFFER_ATTEMPTS) {
+    return { allowed: false, reason: 'exhausted' };
+  }
+  return { allowed: true, repeated, attempt };
+}
+
 export function publishInventoryItem(state, itemId, rawPrice, options = {}) {
   const { now = Date.now(), random = Math.random } = options;
   const item = state.inventory.find((candidate) => candidate.id === itemId);

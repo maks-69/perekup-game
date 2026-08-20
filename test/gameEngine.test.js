@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { PRODUCT_TEMPLATES } from '../src/data.js';
 import {
   applyUpgrade,
@@ -14,6 +16,7 @@ import {
   getDefectPool,
   getItemValue,
   getPeakProgress,
+  getSellerOfferAttempt,
   getUnlockedTier,
   migrateState,
   publishInventoryItem,
@@ -26,6 +29,15 @@ test('расширенный каталог содержит не меньше 7
   for (let tier = 0; tier <= 5; tier += 1) {
     assert.ok(PRODUCT_TEMPLATES.filter((item) => item.tier === tier).length >= 5);
   }
+});
+
+test('каждый SKU имеет собственную неповторяющуюся фотографию', () => {
+  const hashes = PRODUCT_TEMPLATES.map(({ id }) => {
+    const image = readFileSync(new URL(`../public/images/products/items/${id}.webp`, import.meta.url));
+    return createHash('sha256').update(image).digest('hex');
+  });
+  assert.equal(hashes.length, PRODUCT_TEMPLATES.length);
+  assert.equal(new Set(hashes).size, PRODUCT_TEMPLATES.length);
 });
 
 test('новая игра начинается с 500 рублей и выгодного стартового объявления', () => {
@@ -58,6 +70,20 @@ test('продавец никогда не принимает абсурдно �
     const result = decideSeller(listing, 20, round, () => 0);
     assert.equal(result.type, 'reject');
   }
+});
+
+test('одну цену можно повторить три раза, после чего её нужно повысить', () => {
+  const negotiation = {};
+  for (let expectedAttempt = 1; expectedAttempt <= 3; expectedAttempt += 1) {
+    const result = getSellerOfferAttempt(negotiation, 800);
+    assert.deepEqual(result, { allowed: true, repeated: expectedAttempt > 1, attempt: expectedAttempt });
+    negotiation.lastSentOffer = 800;
+    negotiation.sameOfferAttempts = expectedAttempt;
+    negotiation.lastRejectedOffer = 800;
+  }
+  assert.deepEqual(getSellerOfferAttempt(negotiation, 800), { allowed: false, reason: 'exhausted' });
+  assert.deepEqual(getSellerOfferAttempt(negotiation, 790), { allowed: false, reason: 'lower' });
+  assert.deepEqual(getSellerOfferAttempt(negotiation, 850), { allowed: true, repeated: false, attempt: 1 });
 });
 
 test('цену выставленного товара можно изменить без бесплатного перебора покупателей', () => {

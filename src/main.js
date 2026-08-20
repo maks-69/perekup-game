@@ -13,6 +13,7 @@ import {
   getItemValue,
   getLevel,
   getPeakProgress,
+  getSellerOfferAttempt,
   getUnlockedTier,
   getUpgradeCost,
   getUpgradeLockReason,
@@ -26,17 +27,11 @@ const app = document.querySelector('#app');
 const money = (value) => `${Math.round(value).toLocaleString('ru-RU')} ₽`;
 const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
 const unlockRequirement = (unlock) => `${money(unlock.capital)} · ${unlock.deals} ${unlock.deals % 10 === 1 && unlock.deals % 100 !== 11 ? 'сделка' : unlock.deals % 10 >= 2 && unlock.deals % 10 <= 4 && (unlock.deals % 100 < 10 || unlock.deals % 100 >= 20) ? 'сделки' : 'сделок'}`;
-const PRODUCT_IMAGE_BY_CATEGORY = {
-  'Наушники': 'audio', 'Колонки': 'audio', 'Аудио': 'audio',
-  'Мышки': 'peripherals', 'Клавиатуры': 'peripherals', 'Геймпады': 'peripherals',
-  'Кроссовки': 'wearables', 'Дорогие кроссовки': 'wearables', 'Часы': 'wearables',
-  'Гаджеты': 'gadgets', 'Смартфоны': 'phones',
-  'Приставки': 'gaming-tablet', 'Планшеты': 'gaming-tablet',
-  'Ноутбуки': 'laptops', 'Дорогая электроника': 'premium',
-};
+const PRODUCT_PHOTO_IDS = new Set(PRODUCT_TEMPLATES.map((item) => item.id));
 const productImage = (item, className = 'product-photo') => {
-  const image = PRODUCT_IMAGE_BY_CATEGORY[item.category] || 'gadgets';
-  return `<img class="${className}" src="/images/products/${image}.webp" alt="" loading="lazy" decoding="async" />`;
+  const templateId = item.templateId || item.id;
+  const image = PRODUCT_PHOTO_IDS.has(templateId) ? `items/${templateId}` : 'gadgets';
+  return `<img class="${className}" src="/images/products/${image}.webp" alt="${escapeHtml(item.name)}" loading="lazy" decoding="async" />`;
 };
 
 let state = migrateState(platform.load());
@@ -376,15 +371,23 @@ function sendSellerOffer() {
   if (!listing || !input) return;
   const amount = roundPrice(Number(input.value));
   if (!Number.isFinite(amount) || amount < 20 || amount > listing.price * 1.2) { showToast('Укажи разумную цену', 'loss'); return; }
-  if (modal.lastRejectedOffer != null && amount <= modal.lastRejectedOffer) {
-    showToast('После отказа предложи продавцу больше', 'loss');
+  const attempt = getSellerOfferAttempt(modal, amount);
+  if (!attempt.allowed) {
+    showToast(attempt.reason === 'exhausted' ? 'Продавец окончательно отказался — повысь цену' : 'После отказа нельзя снижать предложение', 'loss');
     return;
   }
   modal.chat ||= [];
-  modal.chat.push({ from: 'player', text: `Готов забрать за ${money(amount)}. Как вам?` });
+  const playerText = attempt.attempt === 1
+    ? `Готов забрать за ${money(amount)}. Как вам?`
+    : attempt.attempt === 2
+      ? `Может всё-таки ${money(amount)}? Заберу без задержек.`
+      : `Последний раз предлагаю ${money(amount)}. Договоримся?`;
+  modal.chat.push({ from: 'player', text: playerText });
   const decision = decideSeller(listing, amount, modal.round || 0);
   modal.chat.push({ from: 'seller', text: decision.text });
   modal.round = (modal.round || 0) + 1;
+  modal.lastSentOffer = amount;
+  modal.sameOfferAttempts = attempt.attempt;
   modal.lastOffer = decision.type === 'counter' ? decision.price : amount;
   modal.lastRejectedOffer = decision.type === 'reject' ? amount : null;
   if (decision.type === 'accept' || decision.type === 'counter') {
