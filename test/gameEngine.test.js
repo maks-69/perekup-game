@@ -48,6 +48,14 @@ test('разумное стартовое предложение принима�
   assert.equal(result.price, 260);
 });
 
+test('продавец никогда не принимает абсурдно низкую цену', () => {
+  const listing = { price: 228430, tier: 5 };
+  for (let round = 0; round < 100; round += 1) {
+    const result = decideSeller(listing, 20, round, () => 0);
+    assert.equal(result.type, 'reject');
+  }
+});
+
 test('ремонт увеличивает стоимость и исправляет дефект', () => {
   const item = {
     marketValue: 1000,

@@ -363,12 +363,17 @@ function sendSellerOffer() {
   if (!listing || !input) return;
   const amount = roundPrice(Number(input.value));
   if (!Number.isFinite(amount) || amount < 20 || amount > listing.price * 1.2) { showToast('Укажи разумную цену', 'loss'); return; }
+  if (modal.lastRejectedOffer != null && amount <= modal.lastRejectedOffer) {
+    showToast('После отказа предложи продавцу больше', 'loss');
+    return;
+  }
   modal.chat ||= [];
   modal.chat.push({ from: 'player', text: `Готов забрать за ${money(amount)}. Как вам?` });
   const decision = decideSeller(listing, amount, modal.round || 0);
   modal.chat.push({ from: 'seller', text: decision.text });
   modal.round = (modal.round || 0) + 1;
   modal.lastOffer = decision.type === 'counter' ? decision.price : amount;
+  modal.lastRejectedOffer = decision.type === 'reject' ? amount : null;
   if (decision.type === 'accept' || decision.type === 'counter') {
     modal.sellerAgreed = decision.price;
     modal.sellerDecision = decision.type;

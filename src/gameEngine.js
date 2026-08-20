@@ -200,9 +200,9 @@ export function decideSeller(listing, offer, round = 0, random = Math.random) {
   if (listing.onboarding && offer >= 250) {
     return { type: 'accept', price: offer, text: 'Ладно, договорились. Забирайте сегодня 👍' };
   }
-  const chance = ratio >= 0.97 ? 0.94 : ratio >= 0.9 ? 0.7 : ratio >= 0.82 ? 0.38 : ratio >= 0.72 ? 0.13 : 0.025;
+  const chance = ratio >= 0.97 ? 0.94 : ratio >= 0.9 ? 0.7 : ratio >= 0.82 ? 0.38 : ratio >= 0.72 ? 0.13 : 0;
   const tierPenalty = [0, 0.03, 0.07, 0.1, 0.14, 0.17][listing.tier || 0];
-  if (random() < Math.max(0.02, chance - tierPenalty - round * 0.08)) {
+  if (random() < Math.max(0, chance - tierPenalty - round * 0.08)) {
     return { type: 'accept', price: offer, text: pick(['Хорошо, по рукам.', 'Договорились. Когда сможете забрать?', 'Ладно, пусть будет по-вашему 👍'], random) };
   }
   if (ratio >= 0.67 && round < 2 && random() < 0.8) {
