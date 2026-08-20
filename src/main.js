@@ -17,6 +17,7 @@ import {
   getUpgradeCost,
   getUpgradeLockReason,
   migrateState,
+  publishInventoryItem,
   roundPrice,
   uid,
 } from './gameEngine.js';
@@ -25,6 +26,18 @@ const app = document.querySelector('#app');
 const money = (value) => `${Math.round(value).toLocaleString('ru-RU')} ₽`;
 const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
 const unlockRequirement = (unlock) => `${money(unlock.capital)} · ${unlock.deals} ${unlock.deals % 10 === 1 && unlock.deals % 100 !== 11 ? 'сделка' : unlock.deals % 10 >= 2 && unlock.deals % 10 <= 4 && (unlock.deals % 100 < 10 || unlock.deals % 100 >= 20) ? 'сделки' : 'сделок'}`;
+const PRODUCT_IMAGE_BY_CATEGORY = {
+  'Наушники': 'audio', 'Колонки': 'audio', 'Аудио': 'audio',
+  'Мышки': 'peripherals', 'Клавиатуры': 'peripherals', 'Геймпады': 'peripherals',
+  'Кроссовки': 'wearables', 'Дорогие кроссовки': 'wearables', 'Часы': 'wearables',
+  'Гаджеты': 'gadgets', 'Смартфоны': 'phones',
+  'Приставки': 'gaming-tablet', 'Планшеты': 'gaming-tablet',
+  'Ноутбуки': 'laptops', 'Дорогая электроника': 'premium',
+};
+const productImage = (item, className = 'product-photo') => {
+  const image = PRODUCT_IMAGE_BY_CATEGORY[item.category] || 'gadgets';
+  return `<img class="${className}" src="/images/products/${image}.webp" alt="" loading="lazy" decoding="async" />`;
+};
 
 let state = migrateState(platform.load());
 let activeTab = 'feed';
@@ -83,7 +96,7 @@ function listingCard(item) {
     <button class="listing-card ${item.urgent ? 'is-urgent' : ''}" data-action="open-listing" data-id="${item.id}">
       <div class="listing-visual tone-${item.templateId.length % 4}">
         ${item.urgent ? `<span class="urgent">СРОЧНО · <i data-countdown="${item.expiresAt}">...</i></span>` : ''}
-        <span class="product-emoji">${item.emoji}</span>
+        ${productImage(item, 'product-photo')}
         <span class="category-chip">${escapeHtml(item.category)}</span>
       </div>
       <div class="listing-copy">
@@ -115,7 +128,7 @@ function renderLockedDeals(unlockedTier) {
           const unlock = TIER_UNLOCKS.find((candidate) => candidate.tier === item.tier);
           return `<button class="locked-deal-card locked-tone-${item.tier}" data-action="locked-teaser" data-tier="${item.tier}">
             <span class="locked-price">рынок ≈ ${money(item.base)}</span>
-            <span class="locked-product">${item.emoji}</span>
+            ${productImage(item, 'locked-product-photo')}
             <span class="lock-seal">🔒</span>
             <span class="locked-category">${escapeHtml(item.category)}</span>
             <b>${escapeHtml(item.name)}</b>
@@ -163,11 +176,11 @@ function inventoryCard(item) {
   return `
     <article class="inventory-card ${item.status === 'listed' ? 'listed' : ''}">
       <button class="inventory-main" data-action="open-item" data-id="${item.id}">
-        <span class="inventory-emoji">${item.emoji}</span>
+        <span class="inventory-photo">${productImage(item, 'product-photo')}</span>
         <span class="inventory-copy"><span class="status-tag">${item.status === 'listed' ? 'НА ПРОДАЖЕ' : 'В НАЛИЧИИ'}</span><b>${escapeHtml(item.name)}</b><small>${item.condition} · куплен за ${money(item.purchasePrice)}</small></span>
         <span class="value-stack"><small>Потенциал</small><b>${money(value)}</b><em class="${profitHint >= 0 ? 'positive' : 'negative'}">${profitHint >= 0 ? '+' : ''}${money(profitHint)}</em></span>
       </button>
-      ${item.status === 'listed' ? `<div class="listed-strip"><span>Цена: <b>${money(item.listPrice)}</b></span><span>${state.offers.some((offer) => offer.itemId === item.id && offer.status === 'active') ? 'Есть предложение' : 'Ищем покупателя…'}</span></div>` : `<div class="inventory-actions"><button class="soft-button" data-action="open-item" data-id="${item.id}">Улучшить</button><button class="primary-button compact" data-action="open-list" data-id="${item.id}">Продать</button></div>`}
+      ${item.status === 'listed' ? `<div class="listed-strip"><span>Цена: <b>${money(item.listPrice)}</b></span><span>${state.offers.some((offer) => offer.itemId === item.id && offer.status === 'active') ? 'Есть предложение' : 'Ищем покупателя…'}</span><button class="listed-edit" data-action="edit-listing-price" data-id="${item.id}">Изменить цену</button></div>` : `<div class="inventory-actions"><button class="soft-button" data-action="open-item" data-id="${item.id}">Улучшить</button><button class="primary-button compact" data-action="open-list" data-id="${item.id}">Продать</button></div>`}
     </article>
   `;
 }
@@ -188,7 +201,7 @@ function offerCard(offer) {
   return `
     <article class="offer-card">
       <div class="buyer-line"><span class="buyer-avatar">${offer.avatar}</span><div><b>${escapeHtml(offer.buyerName)}</b><small>${escapeHtml(offer.buyerTitle)} · ${age} мин</small></div><span class="online-dot"></span></div>
-      <div class="offer-product"><span>${item.emoji}</span><div><small>${escapeHtml(item.name)}</small><b>Выставлено за ${money(item.listPrice)}</b></div></div>
+      <div class="offer-product"><span class="offer-product-photo">${productImage(item, 'product-photo')}</span><div><small>${escapeHtml(item.name)}</small><b>Выставлено за ${money(item.listPrice)}</b></div></div>
       <div class="message-bubble">${escapeHtml(offer.text)}</div>
       <div class="offer-price"><span>Предлагает</span><strong>${money(offer.amount)}</strong></div>
       <div class="offer-actions"><button class="ghost-button danger" data-action="decline-offer" data-id="${offer.id}">Отказать</button><button class="soft-button" data-action="counter-offer" data-id="${offer.id}">Встречная</button><button class="primary-button compact" data-action="accept-offer" data-id="${offer.id}">Принять</button></div>
@@ -257,7 +270,7 @@ function renderListingModal(item) {
   return `
     <div class="modal-backdrop"><section class="modal-card deal-modal" role="dialog" aria-modal="true" aria-label="Объявление ${escapeHtml(item.name)}">
       <button class="modal-close" data-action="close-modal" aria-label="Закрыть">×</button>
-      <div class="deal-product tone-${item.templateId.length % 4}">${item.urgent ? `<span class="urgent">СРОЧНО · <i data-countdown="${item.expiresAt}">...</i></span>` : ''}<span>${item.emoji}</span></div>
+      <div class="deal-product tone-${item.templateId.length % 4}">${item.urgent ? `<span class="urgent">СРОЧНО · <i data-countdown="${item.expiresAt}">...</i></span>` : ''}${productImage(item, 'deal-product-photo')}</div>
       <div class="deal-body"><span class="condition ${item.conditionClass}">${item.condition}</span><h2>${escapeHtml(item.name)}</h2><div class="deal-price"><strong>${money(item.price)}</strong><small>Цена продавца</small></div><p class="description">${escapeHtml(item.description)}</p>
         <div class="seller-row"><span>${item.seller.charAt(0)}</span><div><b>${escapeHtml(item.seller)}</b><small>Продавец · был недавно</small></div></div>
         <div class="knowledge-grid">
@@ -273,7 +286,7 @@ function renderListingModal(item) {
 
 function renderItemModal(item) {
   return `<div class="modal-backdrop"><section class="modal-card item-modal" role="dialog" aria-modal="true"><button class="modal-close" data-action="close-modal" aria-label="Закрыть">×</button>
-    <div class="item-heading"><span>${item.emoji}</span><div><span class="condition ${item.conditionClass}">${item.condition}</span><h2>${escapeHtml(item.name)}</h2><p>Куплен за ${money(item.purchasePrice)} · расходы ${money(item.expenses)}</p></div></div>
+    <div class="item-heading"><span class="item-photo">${productImage(item, 'product-photo')}</span><div><span class="condition ${item.conditionClass}">${item.condition}</span><h2>${escapeHtml(item.name)}</h2><p>Куплен за ${money(item.purchasePrice)} · расходы ${money(item.expenses)}</p></div></div>
     ${item.defect && !item.defectFixed ? `<div class="defect-alert"><span>${item.defect.emoji}</span><div><b>Дефект: ${escapeHtml(item.defect.label)}</b><small>Снижает потенциальную цену</small></div></div>` : item.defect && item.defectFixed ? `<div class="fixed-alert">✓ Дефект исправлен</div>` : `<div class="fixed-alert">✓ Дефектов нет</div>`}
     <div class="value-panel"><div><span>Потенциальная цена</span><strong>${money(getItemValue(item))}</strong></div><div><span>Потенциальная прибыль</span><strong class="${getItemValue(item) - item.purchasePrice - item.expenses >= 0 ? 'positive' : 'negative'}">${money(getItemValue(item) - item.purchasePrice - item.expenses)}</strong></div></div><h3>Подготовка к продаже</h3>
     <div class="upgrade-list">${UPGRADES.map((upgrade) => { const applied = item.upgrades.includes(upgrade.id); const cost = getUpgradeCost(item, upgrade.id); const lockReason = getUpgradeLockReason(item, upgrade.id); const unavailable = Boolean(lockReason) || state.cash < cost || item.status === 'listed'; return `<button data-action="upgrade" data-id="${item.id}" data-upgrade="${upgrade.id}" ${unavailable ? 'disabled' : ''} class="upgrade-button ${applied ? 'applied' : ''}"><span>${upgrade.emoji}</span><div><b>${upgrade.name}</b><small>${applied ? 'Готово' : lockReason || upgrade.desc}</small></div><strong>${applied ? '✓' : lockReason ? '—' : money(cost)}</strong></button>`; }).join('')}</div>
@@ -287,7 +300,7 @@ function renderModal() {
   if (modal.type === 'listing') { const item = state.listings.find((listing) => listing.id === modal.id); return item ? renderListingModal(item) : ''; }
   if (modal.type === 'purchase-result') { const item = state.inventory.find((candidate) => candidate.id === modal.itemId); return item ? `<div class="modal-backdrop"><section class="modal-card result-card" role="dialog" aria-modal="true"><div class="result-icon ${item.defect ? 'warning' : 'success'}">${item.defect ? item.defect.emoji : '✓'}</div><span class="eyebrow">ПОКУПКА ЗАВЕРШЕНА</span><h2>${item.defect ? 'Есть нюанс…' : 'Товар твой!'}</h2><p>${item.defect ? `После покупки обнаружилось: <b>${escapeHtml(item.defect.label)}</b>. Это снизит цену, пока не исправишь.` : 'Скрытых дефектов не обнаружено. Теперь подготовь товар к продаже.'}</p><div class="receipt-row"><span>Списано с баланса</span><b>−${money(item.purchasePrice)}</b></div><button class="primary-button jumbo" data-action="go-inventory">К товару <span>→</span></button></section></div>` : ''; }
   if (modal.type === 'item') { const item = state.inventory.find((candidate) => candidate.id === modal.id); return item ? renderItemModal(item) : ''; }
-  if (modal.type === 'list') { const item = state.inventory.find((candidate) => candidate.id === modal.id); if (!item) return ''; const suggested = roundPrice(getItemValue(item) * 1.08); return `<div class="modal-backdrop"><section class="modal-card list-modal" role="dialog" aria-modal="true"><button class="modal-close" data-action="close-modal" aria-label="Закрыть">×</button><span class="big-emoji">${item.emoji}</span><span class="eyebrow">НОВОЕ ОБЪЯВЛЕНИЕ</span><h2>За сколько продаём?</h2><p>${escapeHtml(item.name)}</p><div class="price-input"><input id="list-price" type="number" inputmode="numeric" min="50" step="10" value="${suggested}" /><span>₽</span></div><div class="price-guide"><div><span>Быстрая продажа</span><b>${money(roundPrice(getItemValue(item) * .9))}</b></div><div class="recommended"><span>Рекомендуем</span><b>${money(suggested)}</b></div><div><span>Смелая цена</span><b>${money(roundPrice(getItemValue(item) * 1.25))}</b></div></div><p class="fine-print">Высокая цена может отпугнуть покупателей. Предложения начнут приходить через несколько секунд.</p><button class="primary-button jumbo" data-action="publish-item" data-id="${item.id}">Опубликовать</button></section></div>`; }
+  if (modal.type === 'list') { const item = state.inventory.find((candidate) => candidate.id === modal.id); if (!item) return ''; const editing = modal.editing && item.status === 'listed'; const recommended = roundPrice(getItemValue(item) * 1.08); const suggested = editing ? item.listPrice : recommended; return `<div class="modal-backdrop"><section class="modal-card list-modal" role="dialog" aria-modal="true"><button class="modal-close" data-action="close-modal" aria-label="Закрыть">×</button>${productImage(item, 'listing-editor-photo')}<span class="eyebrow">${editing ? 'РЕДАКТИРОВАНИЕ ОБЪЯВЛЕНИЯ' : 'НОВОЕ ОБЪЯВЛЕНИЕ'}</span><h2>${editing ? 'Меняем цену?' : 'За сколько продаём?'}</h2><p>${escapeHtml(item.name)}</p><div class="price-input"><input id="list-price" type="number" inputmode="numeric" min="50" step="10" value="${suggested}" /><span>₽</span></div><div class="price-guide"><div><span>Быстрая продажа</span><b>${money(roundPrice(getItemValue(item) * .9))}</b></div><div class="recommended"><span>Рекомендуем</span><b>${money(recommended)}</b></div><div><span>Смелая цена</span><b>${money(roundPrice(getItemValue(item) * 1.25))}</b></div></div><p class="fine-print">${editing ? 'Текущие предложения будут отозваны, а поиск покупателя запустится заново.' : 'Высокая цена может отпугнуть покупателей. Предложения начнут приходить через несколько секунд.'}</p><button class="primary-button jumbo" data-action="publish-item" data-id="${item.id}">${editing ? 'Сохранить новую цену' : 'Опубликовать'}</button></section></div>`; }
   if (modal.type === 'counter') { const offer = state.offers.find((candidate) => candidate.id === modal.offerId); const item = offer && state.inventory.find((candidate) => candidate.id === offer.itemId); return offer && item ? `<div class="modal-backdrop"><section class="modal-card counter-modal" role="dialog" aria-modal="true"><button class="modal-close" data-action="close-modal" aria-label="Закрыть">×</button><span class="buyer-avatar large">${offer.avatar}</span><span class="eyebrow">ВСТРЕЧНАЯ ЦЕНА ДЛЯ ${escapeHtml(offer.buyerName).toUpperCase()}</span><h2>Не перегни с торгом</h2><p>Покупатель предложил ${money(offer.amount)}. Твоя цена в объявлении — ${money(item.listPrice)}.</p><div class="price-input"><input id="counter-price" type="number" inputmode="numeric" min="${offer.amount}" step="10" value="${roundPrice((offer.amount + item.listPrice) / 2)}" /><span>₽</span></div><button class="primary-button jumbo" data-action="submit-counter" data-id="${offer.id}">Отправить предложение</button></section></div>` : ''; }
   if (modal.type === 'sale-result') { const sale = modal.sale; return `<div class="modal-backdrop"><section class="modal-card result-card sale-result" role="dialog" aria-modal="true"><div class="confetti">✦ <i>●</i> ✦ <i>●</i></div><div class="result-icon ${sale.profit >= 0 ? 'success' : 'warning'}">${sale.profit >= 0 ? '₽' : '!'}</div><span class="eyebrow">СДЕЛКА ЗАКРЫТА</span><h2>${sale.profit >= 0 ? `Прибыль ${money(sale.profit)}` : `Убыток ${money(Math.abs(sale.profit))}`}</h2><div class="receipt"><div><span>Цена покупки</span><b>${money(sale.purchasePrice)}</b></div><div><span>Расходы</span><b>${money(sale.expenses)}</b></div><div><span>Цена продажи</span><b>${money(sale.salePrice)}</b></div><div class="total"><span>Чистая прибыль</span><b class="${sale.profit >= 0 ? 'positive' : 'negative'}">${sale.profit >= 0 ? '+' : ''}${money(sale.profit)}</b></div><div><span>ROI</span><b>${sale.roi.toFixed(1).replace('.', ',')}%</b></div></div><button class="primary-button jumbo" data-action="finish-sale">Искать следующую сделку <span>→</span></button></section></div>`; }
   if (modal.type === 'reward') { const copy = { expert: ['Экспертная оценка', 'Узнай реальную рыночную стоимость до покупки.', '💡'], inspect: ['Проверка товара', 'Обнаружь скрытый дефект до того, как отдашь деньги.', '🔍'], urgent: ['Срочная находка', 'Добавь в ленту одно выгодное объявление с таймером.', '⚡'], refresh: ['Свежая лента', 'Полностью обнови объявления и поищи новую выгоду.', '↻'], fast: ['Быстрый покупатель', 'Следующее предложение придёт почти сразу.', '🏃'] }[modal.kind]; return `<div class="modal-backdrop"><section class="modal-card reward-modal" role="dialog" aria-modal="true"><button class="modal-close" data-action="close-modal" aria-label="Закрыть">×</button><div class="ad-badge">AD</div><div class="reward-icon">${copy[2]}</div><span class="eyebrow">ЗДЕСЬ БУДЕТ REWARDED-РЕКЛАМА</span><h2>${copy[0]}</h2><p>${copy[1]}</p><button class="primary-button jumbo" data-action="claim-reward">Получить бонус</button><small>В MVP бонус выдаётся сразу без настоящей рекламы</small></section></div>`; }
@@ -322,7 +335,7 @@ function completePurchase(listing, price) {
 function completeSale(item, offer, price) {
   const profit = price - item.purchasePrice - item.expenses;
   const roi = item.purchasePrice + item.expenses > 0 ? profit / (item.purchasePrice + item.expenses) * 100 : 0;
-  const sale = { id: uid('sale'), itemId: item.id, name: item.name, emoji: item.emoji, purchasePrice: item.purchasePrice, expenses: item.expenses, salePrice: price, profit, roi, soldAt: Date.now() };
+  const sale = { id: uid('sale'), itemId: item.id, templateId: item.templateId, category: item.category, name: item.name, emoji: item.emoji, purchasePrice: item.purchasePrice, expenses: item.expenses, salePrice: price, profit, roi, soldAt: Date.now() };
   state.cash += price;
   state.earned += Math.max(0, profit);
   state.stats.deals += 1;
@@ -395,11 +408,9 @@ function applyItemUpgrade(itemId, upgradeId) {
 }
 
 function publishItem(itemId) {
-  const item = state.inventory.find((candidate) => candidate.id === itemId);
-  const price = roundPrice(Number(document.querySelector('#list-price')?.value));
-  if (!item || !Number.isFinite(price) || price < 50) { showToast('Укажи цену продажи', 'loss'); return; }
-  item.status = 'listed'; item.listPrice = price; item.listedAt = Date.now(); item.nextOfferAt = Date.now() + 4500 + Math.random() * 4500; item.offerCount = 0;
-  setTutorialStep(4); modal = null; commit(); showToast('Объявление опубликовано', 'gain');
+  const result = publishInventoryItem(state, itemId, document.querySelector('#list-price')?.value);
+  if (!result.ok) { showToast('Укажи цену продажи', 'loss'); return; }
+  setTutorialStep(4); modal = null; commit(); showToast(result.editing ? 'Цена изменена — ищем нового покупателя' : 'Объявление опубликовано', 'gain');
 }
 
 function declineOffer(offerId) {
@@ -458,6 +469,7 @@ app.addEventListener('click', (event) => {
   else if (action === 'open-item') { modal = { type: 'item', id }; render(); }
   else if (action === 'upgrade') applyItemUpgrade(id, upgrade);
   else if (action === 'open-list') { modal = { type: 'list', id }; render(); }
+  else if (action === 'edit-listing-price') { modal = { type: 'list', id, editing: true }; render(); }
   else if (action === 'publish-item') publishItem(id);
   else if (action === 'decline-offer') declineOffer(id);
   else if (action === 'counter-offer') { modal = { type: 'counter', offerId: id }; render(); }

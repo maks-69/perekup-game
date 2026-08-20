@@ -11,7 +11,7 @@ import {
 } from './data.js';
 
 export const SAVE_VERSION = 1;
-export const FEED_REVISION = 4;
+export const FEED_REVISION = 5;
 
 export const pick = (items, random = Math.random) => items[Math.floor(random() * items.length)];
 export const between = (min, max, random = Math.random) => min + (max - min) * random();
@@ -211,6 +211,27 @@ export function decideSeller(listing, offer, round = 0, random = Math.random) {
     return { type: 'counter', price: counter, text: `За ${counter.toLocaleString('ru-RU')} ₽ отдам. Ниже уже не могу.` };
   }
   return { type: 'reject', text: pick(['Нет, это слишком мало.', 'Спасибо, но за такую цену оставлю себе.', 'Не, столько точно не скину.', 'Уже есть предложение повыше.'], random) };
+}
+
+export function publishInventoryItem(state, itemId, rawPrice, options = {}) {
+  const { now = Date.now(), random = Math.random } = options;
+  const item = state.inventory.find((candidate) => candidate.id === itemId);
+  const numericPrice = Number(rawPrice);
+  if (!item || !Number.isFinite(numericPrice) || numericPrice < 50) return { ok: false, editing: false };
+
+  const price = roundPrice(numericPrice);
+  const editing = item.status === 'listed';
+  if (editing) {
+    state.offers.forEach((offer) => {
+      if (offer.itemId === item.id && offer.status === 'active') offer.status = 'price-changed';
+    });
+  }
+  item.status = 'listed';
+  item.listPrice = price;
+  item.listedAt = now;
+  item.nextOfferAt = now + (editing ? 6500 + random() * 5000 : 4500 + random() * 4500);
+  if (!editing) item.offerCount = 0;
+  return { ok: true, editing, price };
 }
 
 export function getUpgradeCost(item, upgradeId) {

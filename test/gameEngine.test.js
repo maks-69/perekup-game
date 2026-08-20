@@ -16,12 +16,16 @@ import {
   getPeakProgress,
   getUnlockedTier,
   migrateState,
+  publishInventoryItem,
   roundPrice,
 } from '../src/gameEngine.js';
 
-test('каталог содержит не меньше 30 разных шаблонов', () => {
-  assert.ok(PRODUCT_TEMPLATES.length >= 30);
+test('расширенный каталог содержит не меньше 70 разных SKU', () => {
+  assert.ok(PRODUCT_TEMPLATES.length >= 70);
   assert.equal(new Set(PRODUCT_TEMPLATES.map((item) => item.id)).size, PRODUCT_TEMPLATES.length);
+  for (let tier = 0; tier <= 5; tier += 1) {
+    assert.ok(PRODUCT_TEMPLATES.filter((item) => item.tier === tier).length >= 5);
+  }
 });
 
 test('новая игра начинается с 500 рублей и выгодного стартового объявления', () => {
@@ -54,6 +58,24 @@ test('продавец никогда не принимает абсурдно �
     const result = decideSeller(listing, 20, round, () => 0);
     assert.equal(result.type, 'reject');
   }
+});
+
+test('цену выставленного товара можно изменить без бесплатного перебора покупателей', () => {
+  const item = { id: 'item-1', status: 'listed', listPrice: 1000, offerCount: 3 };
+  const state = {
+    inventory: [item],
+    offers: [
+      { id: 'offer-active', itemId: item.id, status: 'active' },
+      { id: 'offer-old', itemId: item.id, status: 'declined' },
+    ],
+  };
+  const result = publishInventoryItem(state, item.id, 1250, { now: 10000, random: () => 0 });
+  assert.deepEqual(result, { ok: true, editing: true, price: 1250 });
+  assert.equal(item.listPrice, 1250);
+  assert.equal(item.offerCount, 3);
+  assert.equal(item.nextOfferAt, 16500);
+  assert.equal(state.offers[0].status, 'price-changed');
+  assert.equal(state.offers[1].status, 'declined');
 });
 
 test('ремонт увеличивает стоимость и исправляет дефект', () => {
